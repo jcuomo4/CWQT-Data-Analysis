@@ -1,0 +1,6 @@
+# Never commit the data workbook or generated outputs; the workflow builds them fresh.
+*.xlsx
+build/
+site/
+cwqt_outputs/
+__pycache__/

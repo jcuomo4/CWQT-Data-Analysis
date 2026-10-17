@@ -1,0 +1,7 @@
+pandas>=2.2
+numpy>=1.26
+openpyxl>=3.1
+matplotlib>=3.8
+# Only needed when the sheet is private and shared with a Google service account:
+google-auth>=2.29
+requests>=2.31
