@@ -3,7 +3,7 @@
 Maps and charts of Enterococcus results from the SWIM Coalition's **Community Water Quality Testing
 (CWQT)** program. They're rebuilt automatically every morning from the CWQT master Google Sheet.
 
-**Live map:** <https://jcuomo4.github.io/CWQT-Data-Analysis/> (embedded on the SWIM Wix site)
+**Live map:** <https://jcuomo4.github.io/CWQT-Data-Analysis/>
 
 ```
 CWQT master Google Sheet
