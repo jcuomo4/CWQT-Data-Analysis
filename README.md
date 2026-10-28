@@ -1,15 +1,17 @@
 # CWQT Data Analysis
 
-Maps and charts of Enterococcus results from the SWIM Coalition's **Community Water Quality Testing
-(CWQT)** program. They're rebuilt automatically every morning from the CWQT master Google Sheet.
+The **Community Water Quality Testing Data Portal**: an interactive map and charts of Enterococcus
+results from the SWIM Coalition's CWQT program, rebuilt automatically every morning from the CWQT
+master Google Sheet.
 
-**Live map:** <https://jcuomo4.github.io/CWQT-Data-Analysis/>
+**Live portal:** <https://jcuomo4.github.io/CWQT-Data-Analysis/> ·
+**Charts page:** <https://jcuomo4.github.io/CWQT-Data-Analysis/charts.html>
 
 ```
 CWQT master Google Sheet
         │  downloaded daily at 7:17 am ET (GitHub Actions)
         ▼
-cwqt_visualize.py  ──►  map + charts + PDF  ──►  GitHub Pages site  ──►  Wix "Embed a site"
+cwqt_visualize.py + templates/  ──►  map, charts page, PDFs  ──►  GitHub Pages  ──►  Wix "Embed a site"
 ```
 
 Nobody needs to run anything. Results entered in the sheet appear on the map the next morning.
@@ -21,6 +23,7 @@ Nobody needs to run anything. Results entered in the sheet appear on the map the
 | File | Purpose |
 |---|---|
 | `cwqt_visualize.py` | Reads the workbook, calculates the statistics and writes every output. All thresholds and definitions are in its **CONFIGURATION** section near the top. |
+| `templates/` | The web pages' design: `map.html` (map page), `charts.html` (charts page), `cwqt.css` (shared colors, fonts, banner). Edit these to change how the portal looks; see [Changing the look](#changing-the-look-of-the-portal). |
 | `requirements.txt` | Python packages the script needs. |
 | `.github/workflows/update-map.yml` | The daily job: download the sheet → run the script → publish the site. |
 | `status.json` | Written by the daily job: latest sample date, sample count and site count. A new commit means new data arrived. |
@@ -30,13 +33,16 @@ Nobody needs to run anything. Results entered in the sheet appear on the map the
 
 | Output | Shows | Published on the site? |
 |---|---|---|
-| `cwqt_map.html` (also `index.html`) | Interactive map. One layer per season, plus "Latest 30 days" and "All seasons". Clicking a site shows its stats and a mini trend chart. | Yes |
+| `index.html` | The map page. It has a SWIM banner with links to the charts page and a **Layers** menu: CWQT results by season, "Latest 30 days", "All seasons" and earlier seasons, plus basemap choices and a streams overlay. Clicking a site shows its stats, a mini trend chart and a link to its full time series. (`cwqt_map.html` is a copy, so the old address still works.) | Yes |
+| `charts.html` | Charts page: summary numbers, each chart with a short description, and a list of every site's time-series PDF | Yes |
+| `cwqt.css` | Shared styles for both pages (copied from `templates/`) | Yes |
 | `1_program_trend.png` | Typical site geomean by season (all sites, and long-running sites only) and % of samples over 104, wet vs dry weather | Yes |
 | `2_site_by_season_heatmap.png` | Every site × every season, colored good / advisory / poor | Yes |
 | `3_rainfall_effect.png` | Bacteria levels by rainfall in the ~72 hours before sampling | Yes |
 | `4_waterbody_comparison.png` | Geomean by waterbody over the last 5 seasons, with one dot per site | Yes |
 | `5_latest_30_day_status.png` | 30-day geomean for each site (same calculation as the sheet's GeoMean tabs) | Yes |
 | `site_timeseries.pdf` | One page per site: every regular-season sample, by season | Yes |
+| `sites/site-NNN.pdf` | The same page for each site on its own (NNN = Site ID), linked from the map popups and the charts page | Yes |
 | `tables/*.csv` | The numbers behind every chart | No |
 | `data_quality_report.txt` | Problems found in the sheet (bad coordinates, duplicate rows, names out of sync, lab QC notes…) | No |
 | `status.json` | Latest sample date and counts | Committed to the repository |
@@ -131,6 +137,36 @@ numbers in the `uses:` lines fixes them.
 
 ---
 
+## Changing the look of the portal
+
+The design lives in `templates/` and is separate from the calculations. Edit those files on GitHub
+(pencil icon → commit), then run the workflow (or wait for the next morning) to publish.
+
+| To change… | Edit |
+|---|---|
+| Colors, fonts, button style, banner height | the **SWIM BRAND** block at the top of `templates/cwqt.css` |
+| Banner title, button labels, popup wording, legend text | `templates/map.html` |
+| Chart descriptions and page text on the charts page | `templates/charts.html` |
+| The logo | It's loaded from SWIM's Wix site (`LOGO_URL` in `cwqt_visualize.py`). To host it here instead, save it as `templates/assets/swim-logo.png`. |
+| Basemap choices or the streams overlay | the `BASEMAPS` and `WATERWAYS` lists near the top of the script in `templates/map.html` |
+| Thresholds, categories, season dates | the CONFIGURATION section of `cwqt_visualize.py` (used by the charts *and* the map) |
+
+Words in double curly braces in the templates (e.g. `{{DATA}}`, `{{N_SITES}}`) are filled in by the
+script. Keep them where you want those values to appear.
+
+**Adding map layers later** (e.g. CSO outfalls, green infrastructure): put the data file (GeoJSON) in
+`templates/assets/`, then add an entry to the `EXTRA_LAYERS` list in `templates/map.html`. There's a
+commented example there. Each entry appears as its own group with a checkbox in the Layers menu.
+
+**Current design** (October 2026), matched to swimmablenyc.org:
+- Poppins font, SWIM navy `#092e6e` with square-cornered buttons, SWIM blue `#0d4ab2` links, cream
+  `#f7f7f3` page background.
+- Light gray basemap with the USGS streams and rivers overlay on top, so narrow waterways like the
+  Bronx River stand out. "Streets" and "Satellite" basemaps are also available.
+- On phones the legend starts collapsed, button labels shorten, and tap targets are larger.
+
+---
+
 ## Running it on your own computer
 
 ```bash
@@ -151,7 +187,10 @@ Options:
 | `--window-end YYYY-MM-DD` | End date of the 30-day window (default: latest sample). |
 | `--average-splits` | Average lab/field split results recorded in Notes. |
 | `--site-pngs` | Also save one PNG per site. |
-| `--no-map` | Skip the interactive map. |
+| `--no-map` | Skip the web pages (map and charts page). |
+
+Outputs go to `cwqt_outputs/` (or the `--out` folder). Open `index.html` there in a browser to
+preview the portal before publishing.
 
 ---
 

@@ -1,0 +1,361 @@
+<!doctype html>
+<!--
+  CWQT Data Portal: map page template.
+  cwqt_visualize.py fills in the LOGO_URL and DATA placeholders (in double curly braces)
+  and saves the result as index.html.
+  Edit freely: the layout and wording are here, the shared look is in cwqt.css.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Community Water Quality Testing Data Portal · SWIM Coalition</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="cwqt.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  body.map-page { display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+  #map { flex: 1; min-height: 0; background: #e4e7e8; font-family: var(--font-body); }
+
+  /* Layers dropdown */
+  .layers-menu { position: relative; }
+  .layers-panel {
+    position: absolute; right: 0; top: calc(100% + 8px);
+    width: 300px; max-width: calc(100vw - 20px);
+    max-height: calc(100vh - var(--banner-h) - 24px); overflow-y: auto;
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, .18); padding: 4px 0;
+  }
+  .layers-panel[hidden] { display: none; }
+  .chev { width: 10px; height: 10px; flex-shrink: 0; transition: transform .15s; }
+  details[open] > summary .chev { transform: rotate(90deg); }
+  summary { list-style: none; cursor: pointer; }
+  summary::-webkit-details-marker { display: none; }
+  .layer-group + .layer-group { border-top: 1px solid var(--line); }
+  .layer-group > summary { display: flex; align-items: center; gap: 8px; padding: 12px 14px; font-weight: 700; }
+  .layer-group > summary small { font-weight: 400; color: var(--ink-2); }
+  .group-body { padding: 0 14px 10px 32px; }
+  .opt { display: flex; align-items: center; gap: 8px; min-height: 32px; cursor: pointer; }
+  .opt input { margin: 0; accent-color: var(--brand); width: 16px; height: 16px; flex-shrink: 0; }
+  .opt.selected { color: var(--brand); font-weight: 600; }
+  .sub-label { margin: 8px 0 2px; font-size: 12px; color: var(--ink-2); text-transform: uppercase; letter-spacing: .04em; }
+  .subgroup > summary { display: flex; align-items: center; gap: 8px; min-height: 32px; color: var(--ink-2); font-weight: 600; }
+  .subgroup .opts { padding-left: 18px; }
+  .opts.disabled { opacity: .45; pointer-events: none; }
+
+  /* Map panels (legend) */
+  .panel { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow); }
+  .legend { padding: 10px 12px; max-width: 250px; font: 12px/1.4 var(--font-body); color: var(--ink); }
+  .legend > summary { display: flex; align-items: center; gap: 6px; font-weight: 700; }
+  .legend .muted { color: var(--ink-2); }
+  .legend .row { margin: 3px 0; }
+  .dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 7px; vertical-align: -1px; }
+  .leaflet-control-scale-line { font-family: var(--font-body); }
+  .leaflet-bar a { color: var(--ink); }
+
+  /* Popups */
+  .leaflet-popup-content { margin: 12px 14px; font: 12px/1.4 var(--font-body); color: var(--ink); }
+  .pop { width: 290px; max-width: calc(100vw - 90px); }
+  .pop .name { font-weight: 700; font-size: 13px; margin-bottom: 2px; }
+  .pop .muted { color: var(--ink-2); }
+  .pop table { border-collapse: collapse; width: 100%; }
+  .pop td { padding: 1px 0; vertical-align: top; }
+  .pop td:first-child { padding-right: 10px; }
+  .pop svg { width: 100%; height: auto; display: block; }
+  .ts-link { display: inline-block; margin-top: 8px; font-weight: 600; text-decoration: none; }
+  .ts-link:hover { text-decoration: underline; }
+
+  .leaflet-control-attribution { font-size: 10px; }
+  @media (max-width: 640px) {
+    .legend { max-width: 210px; padding: 8px 10px; }
+    .leaflet-control-attribution { font-size: 9px; line-height: 1.3; max-width: calc(100vw - 110px); }
+    .leaflet-popup-content { margin: 10px 12px; }
+  }
+</style>
+</head>
+<body class="map-page">
+
+<header class="banner">
+  <div class="brand">
+    <img class="logo" src="{{LOGO_URL}}" alt="SWIM Coalition"
+         onerror="this.outerHTML='<span class=&quot;logo-text&quot;>SWIM Coalition</span>'">
+    <h1>Community Water Quality Testing Data Portal</h1>
+  </div>
+  <nav class="actions">
+    <a class="btn" href="charts.html" target="_blank" rel="noopener" title="Open all charts and graphics in a new tab">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" aria-hidden="true"><path d="M2 14h12M4 11V7M8 11V3M12 11V6"/></svg>
+      <span class="long">Charts &amp; graphics</span><span class="short">Charts</span>
+    </a>
+    <div class="layers-menu">
+      <button class="btn primary" id="layers-btn" type="button" aria-expanded="false" aria-controls="layers-panel">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" aria-hidden="true"><path d="M8 2 1.5 5.5 8 9l6.5-3.5L8 2Z"/><path d="m1.5 8.5 6.5 3.5 6.5-3.5"/></svg>
+        Layers
+      </button>
+      <div class="layers-panel" id="layers-panel" hidden></div>
+    </div>
+  </nav>
+</header>
+
+<div id="map" role="region" aria-label="Map of CWQT sampling sites"></div>
+
+<script id="cwqt-data" type="application/json">{{DATA}}</script>
+<script>
+(function () {
+  "use strict";
+  const dataEl = document.getElementById("cwqt-data");
+  const D = JSON.parse(dataEl.textContent);
+  dataEl.remove();                       // free the raw text once parsed
+  const C = D.cfg;
+
+  // ===================================================================
+  // BASEMAPS: the options under Layers > Basemap. The first is the default.
+  // ===================================================================
+  const BASEMAPS = [
+    { name: "Light gray",
+      url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+      attribution: "&copy; Esri, HERE, Garmin, OpenStreetMap contributors", maxNativeZoom: 16 },
+    { name: "Streets",
+      url: "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+      attribution: "&copy; <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap</a> contributors", maxNativeZoom: 19 },
+    { name: "Satellite",
+      url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+      attribution: "Imagery &copy; Esri, Maxar, Earthstar Geographics", maxNativeZoom: 19 },
+  ];
+  // Streams and rivers drawn on top of the basemap (USGS National Hydrography Dataset).
+  const WATERWAYS = {
+    name: "Highlight streams & rivers", on: true,
+    url: "https://basemap.nationalmap.gov/arcgis/rest/services/USGSHydroCached/MapServer/tile/{z}/{y}/{x}",
+    attribution: "Streams: USGS National Hydrography Dataset", maxNativeZoom: 16, opacity: 0.8 };
+
+  // ===================================================================
+  // EXTRA LAYERS: future datasets (e.g. CSO outfalls, green
+  // infrastructure) go here. Each becomes its own group in the Layers menu.
+  // Example:
+  //   { group: "Infrastructure", name: "CSO outfalls", on: false,
+  //     load: () => fetch("assets/cso_outfalls.geojson").then(r => r.json())
+  //                 .then(g => L.geoJSON(g, { pointToLayer: (f, ll) => L.circleMarker(ll, { radius: 4 }) })) },
+  // ===================================================================
+  const EXTRA_LAYERS = [];
+
+  // ---------- helpers ----------
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const fmt = v => (v === null || v === undefined) ? "–" : Math.round(v).toLocaleString("en-US");
+  const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const ymd = s => s.split("-").map(Number);
+  const dLong = s => { const [y, m, d] = ymd(s); return `${MON[m-1]} ${d}, ${y}`; };
+  const span = (a, b) => {
+    const [ya, ma, da] = ymd(a), [yb, mb, db] = ymd(b);
+    if (a === b) return dLong(a);
+    if (ya === yb) return `${MON[ma-1]} ${da} – ${MON[mb-1]} ${db}, ${yb}`;
+    return `${MON[ma-1]} ${ya} – ${MON[mb-1]} ${yb}`;
+  };
+  const category = gm => gm === null ? "nodata" : gm <= C.good ? "good" : gm <= C.adv ? "advisory" : "poor";
+  const canHover = window.matchMedia("(hover: hover)").matches;
+  const small = () => window.innerWidth <= 640;
+  const chev = '<svg class="chev" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 1.5 6.5 5 3 8.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+
+  // ---------- popup ----------
+  function sparkline(pts) {
+    const w = 250, h = 74, pl = 4, pr = 4, pt = 6, pb = 14, [y0, y1] = D.years;
+    const lo = Math.log10(C.floor), hi = Math.log10(5000);
+    const X = y => pl + (w - pl - pr) * ((y - y0) / Math.max(1, y1 - y0));
+    const Y = v => { v = Math.min(Math.max(v, C.floor), 5000);
+                     return pt + (h - pt - pb) * (1 - (Math.log10(v) - lo) / (hi - lo)); };
+    let s = `<svg viewBox="0 0 ${w} ${h}" role="img" aria-label="Seasonal geometric mean, ${y0} to ${y1}">`;
+    [[C.floor, C.good, "good"], [C.good, C.adv, "advisory"], [C.adv, 5000, "poor"]].forEach(([a, b, k]) => {
+      s += `<rect x="${pl}" y="${Y(b).toFixed(1)}" width="${w - pl - pr}" height="${(Y(a) - Y(b)).toFixed(1)}" fill="${C.colors[k]}" fill-opacity="0.10"/>`;
+    });
+    for (let i = 1; i < pts.length; i++) {
+      if (pts[i][0] - pts[i-1][0] === 1) {
+        s += `<line x1="${X(pts[i-1][0]).toFixed(1)}" y1="${Y(pts[i-1][1]).toFixed(1)}" x2="${X(pts[i][0]).toFixed(1)}" y2="${Y(pts[i][1]).toFixed(1)}" stroke="${C.series}" stroke-width="2" stroke-linecap="round"/>`;
+      }
+    }
+    pts.forEach(([y, v]) => {
+      s += `<circle cx="${X(y).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="3.5" fill="${C.series}" stroke="#fff" stroke-width="1.5"><title>${y}: ${fmt(v)}</title></circle>`;
+    });
+    s += `<text x="${pl}" y="${h - 2}" font-size="10" fill="${C.ink2}">${y0}</text>`;
+    s += `<text x="${w - pr}" y="${h - 2}" font-size="10" fill="${C.ink2}" text-anchor="end">${y1}</text></svg>`;
+    return s;
+  }
+
+  function popup(r, layerLabel) {
+    const [id, gm, n, pct, gmd, nd, gmw, nw, first, last, lastMpn] = r;
+    const [name, wb, boro, cls] = D.sites[id];
+    const cat = category(gm);
+    const crit = C.crit[cls];
+    let critRow = "";
+    if (crit) critRow = `<tr><td>NYS DEC class ${esc(cls)} criteria</td><td>geomean ≤ ${crit[0]}, ≤10% of samples over ${crit[1]}</td></tr>`;
+    else if (cls) critRow = `<tr><td>NYS DEC class</td><td>${esc(cls)}</td></tr>`;
+    const wetdry = (nd || nw) ? `<tr><td>Geomean, dry / wet weather</td><td>${fmt(gmd)} (n=${nd}) / ${fmt(gmw)} (n=${nw})</td></tr>` : "";
+    const few = n < C.minN ? `<div class="muted" style="margin-top:4px">Only ${n} sample${n !== 1 ? "s" : ""}; a geomean needs ≥${C.minN} to compare with standards.</div>` : "";
+    const pdf = D.pdfs[id] ? `<a class="ts-link" href="${esc(D.pdfs[id])}" target="_blank" rel="noopener">See full time series →</a>` : "";
+    return `<div class="pop">
+      <div class="name">${esc(name)}</div>
+      <div class="muted" style="margin-bottom:6px">${esc(wb)} · ${esc(boro)} · Site ID ${id}</div>
+      <div style="margin-bottom:6px"><span class="dot" style="width:10px;height:10px;margin-right:6px;background:${C.colors[cat]}"></span><b>${esc(C.labels[cat])}</b> <span class="muted">(${esc(layerLabel)})</span></div>
+      <table>
+        <tr><td>Geometric mean</td><td><b>${fmt(gm)}</b> MPN/100 ml</td></tr>
+        <tr><td>Samples</td><td>${n.toLocaleString("en-US")} &nbsp;<span class="muted">${span(first, last)}</span></td></tr>
+        <tr><td>Samples over ${C.limit}</td><td>${pct}%</td></tr>
+        ${wetdry}
+        <tr><td>Most recent result</td><td>${fmt(lastMpn)} on ${dLong(last)}</td></tr>
+        ${critRow}
+      </table>${few}
+      <div class="muted" style="margin-top:8px">Seasonal geomean, all years (overall ${fmt(D.overall[id])}):</div>
+      ${sparkline(D.trend[id] || [])}
+      ${pdf}
+    </div>`;
+  }
+
+  // ---------- map ----------
+  const map = L.map("map", { zoomControl: false, maxZoom: 18, tapTolerance: 20 });
+  window.cwqtMap = map;                  // handy for debugging in the browser console
+  map.fitBounds(D.bounds, { padding: [10, 10] });
+  // Bottom-left: scale bar, with the zoom buttons stacked above it
+  // (controls added later sit higher in a bottom corner).
+  L.control.scale({ position: "bottomleft", metric: false }).addTo(map);
+  map.attributionControl.setPrefix('<a href="https://leafletjs.com">Leaflet</a>');
+  L.control.zoom({ position: "bottomleft" }).addTo(map);
+
+  // One shared canvas draws every site marker: far lighter than one SVG
+  // element per marker. "tolerance" widens the tap target on touch screens.
+  const renderer = L.canvas({ padding: 0.2, tolerance: canHover ? 3 : 10 });
+
+  let basemap = null, waterways = null;
+  function setBasemap(i) {
+    if (basemap) map.removeLayer(basemap);
+    const b = BASEMAPS[i];
+    basemap = L.tileLayer(b.url, { attribution: b.attribution, maxNativeZoom: b.maxNativeZoom,
+                                   maxZoom: 18, keepBuffer: 1, zIndex: 1 }).addTo(map);
+  }
+  function setWaterways(on) {
+    if (waterways) { map.removeLayer(waterways); waterways = null; }
+    if (on) waterways = L.tileLayer(WATERWAYS.url, { attribution: WATERWAYS.attribution, opacity: WATERWAYS.opacity,
+                                                     maxNativeZoom: WATERWAYS.maxNativeZoom, maxZoom: 18,
+                                                     keepBuffer: 1, zIndex: 2 }).addTo(map);
+  }
+
+  // CWQT sites: only the selected layer's markers exist at any time
+  // (switching layers rebuilds them, which keeps memory low).
+  let cwqtLayer = null, cwqtIndex = 0, cwqtOn = true;
+  function buildCwqt(i) {
+    const layer = D.layers[i], g = L.layerGroup();
+    layer.rows.forEach(r => {
+      const [id, gm, n] = r, s = D.sites[id];
+      const cat = category(gm), few = n < C.minN;
+      const m = L.circleMarker([s[4], s[5]], {
+        renderer, radius: few ? 6 : 7, color: few ? C.ink2 : "#ffffff", weight: few ? 1.5 : 2,
+        dashArray: few ? "3,3" : null, fillColor: C.colors[cat], fillOpacity: few ? 0.55 : 0.95
+      });
+      if (canHover) m.bindTooltip(`${esc(s[0])}: geomean ${fmt(gm)} (${esc(C.labels[cat].split(":")[0])}, n=${n})`);
+      m.on("popupopen", () => m.closeTooltip());
+      m.bindPopup(() => popup(r, layer.label), {
+        maxWidth: Math.min(320, window.innerWidth - 50),
+        autoPanPaddingTopLeft: [12, 12], autoPanPaddingBottomRight: [12, 12] });
+      m.addTo(g);
+    });
+    return g;
+  }
+  function showCwqt() {
+    if (cwqtLayer) { map.removeLayer(cwqtLayer); cwqtLayer = null; }
+    if (cwqtOn) cwqtLayer = buildCwqt(cwqtIndex).addTo(map);
+  }
+
+  // ---------- Layers menu ----------
+  const panel = document.getElementById("layers-panel");
+  const btn = document.getElementById("layers-btn");
+  const radio = (name, value, label, checked) =>
+    `<label class="opt${checked ? " selected" : ""}"><input type="radio" name="${name}" value="${value}"${checked ? " checked" : ""}>${esc(label)}</label>`;
+  const check = (id, label, checked) =>
+    `<label class="opt"><input type="checkbox" id="${id}"${checked ? " checked" : ""}>${esc(label)}</label>`;
+
+  const main = D.layers.map((l, i) => [l, i]).filter(([l]) => !l.earlier);
+  const earlier = D.layers.map((l, i) => [l, i]).filter(([l]) => l.earlier);
+  let html = `
+    <details class="layer-group" open>
+      <summary>${chev}CWQT water quality <small>Enterococcus</small></summary>
+      <div class="group-body">
+        ${check("cwqt-on", "Show sampling sites", true)}
+        <div class="opts" id="cwqt-opts">
+          <div class="sub-label">Show results for</div>
+          ${main.map(([l, i]) => radio("cwqt", i, l.name, i === 0)).join("")}
+          ${earlier.length ? `<details class="subgroup"><summary>${chev}Earlier seasons</summary>
+            <div class="opts">${earlier.map(([l, i]) => radio("cwqt", i, l.name, false)).join("")}</div></details>` : ""}
+        </div>
+      </div>
+    </details>
+    <details class="layer-group"${small() ? "" : " open"}>
+      <summary>${chev}Basemap</summary>
+      <div class="group-body">
+        ${BASEMAPS.map((b, i) => radio("basemap", i, b.name, i === 0)).join("")}
+        ${check("waterways-on", WATERWAYS.name, WATERWAYS.on)}
+      </div>
+    </details>`;
+  const extraGroups = [...new Set(EXTRA_LAYERS.map(l => l.group))];
+  extraGroups.forEach(gname => {
+    html += `<details class="layer-group"><summary>${chev}${esc(gname)}</summary><div class="group-body">` +
+      EXTRA_LAYERS.map((l, i) => [l, i]).filter(([l]) => l.group === gname)
+        .map(([l, i]) => check(`extra-${i}`, l.name, l.on)).join("") + `</div></details>`;
+  });
+  panel.innerHTML = html;
+
+  function markSelected(name) {
+    panel.querySelectorAll(`input[name="${name}"]`).forEach(inp =>
+      inp.closest(".opt").classList.toggle("selected", inp.checked));
+  }
+  panel.addEventListener("change", e => {
+    const t = e.target;
+    if (t.name === "cwqt") { cwqtIndex = Number(t.value); markSelected("cwqt"); showCwqt(); map.closePopup(); }
+    else if (t.name === "basemap") { setBasemap(Number(t.value)); markSelected("basemap"); }
+    else if (t.id === "cwqt-on") {
+      cwqtOn = t.checked; document.getElementById("cwqt-opts").classList.toggle("disabled", !cwqtOn); showCwqt();
+    }
+    else if (t.id === "waterways-on") setWaterways(t.checked);
+    else if (t.id && t.id.startsWith("extra-")) toggleExtra(Number(t.id.slice(6)), t.checked);
+  });
+  const extraLoaded = {};
+  function toggleExtra(i, on) {
+    const l = EXTRA_LAYERS[i];
+    if (on) {
+      if (extraLoaded[i]) return extraLoaded[i].addTo(map);
+      Promise.resolve(l.load()).then(layer => { extraLoaded[i] = layer; if (document.getElementById(`extra-${i}`).checked) layer.addTo(map); });
+    } else if (extraLoaded[i]) map.removeLayer(extraLoaded[i]);
+  }
+
+  function openPanel(open) {
+    panel.hidden = !open;
+    btn.setAttribute("aria-expanded", String(open));
+  }
+  btn.addEventListener("click", e => { e.stopPropagation(); openPanel(panel.hidden); });
+  document.addEventListener("click", e => { if (!panel.hidden && !panel.contains(e.target) && e.target !== btn) openPanel(false); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !panel.hidden) { openPanel(false); btn.focus(); } });
+
+  // ---------- legend (bottom right) ----------
+  const Legend = L.Control.extend({
+    options: { position: "bottomright" },
+    onAdd() {
+      const d = L.DomUtil.create("details", "panel legend");
+      if (!small()) d.open = true;
+      d.innerHTML =
+        `<summary>${chev}Legend</summary>
+         <div style="margin-top:6px"><b>Enterococcus geometric mean</b></div>
+         <div class="muted" style="margin-bottom:6px">MPN per 100 ml, NYC DOH primary-contact scale</div>` +
+        ["good", "advisory", "poor"].map(k => `<div class="row"><span class="dot" style="background:${C.colors[k]}"></span>${esc(C.labels[k])}</div>`).join("") +
+        `<div class="row" style="margin-top:4px"><span class="dot" style="width:9px;height:9px;border:1.5px dashed ${C.ink2};opacity:.8"></span>Fewer than ${C.minN} samples</div>
+         <div class="muted" style="margin-top:6px">${esc(D.updated)}. Click a site for details.</div>`;
+      L.DomEvent.disableClickPropagation(d);
+      L.DomEvent.disableScrollPropagation(d);
+      return d;
+    }
+  });
+  map.addControl(new Legend());
+
+  // ---------- start ----------
+  setBasemap(0);
+  setWaterways(WATERWAYS.on);
+  showCwqt();
+  EXTRA_LAYERS.forEach((l, i) => { if (l.on) toggleExtra(i, true); });
+})();
+</script>
+</body>
+</html>

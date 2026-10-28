@@ -1,0 +1,141 @@
+<!doctype html>
+<!--
+  CWQT Data Portal: charts page template.
+  cwqt_visualize.py fills in the placeholders written in double curly braces
+  (logo, summary numbers, date ranges, the per-site list) and saves this as charts.html.
+  The descriptions below are plain text: edit them freely.
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Charts &amp; graphics · Community Water Quality Testing Data Portal</title>
+<link rel="stylesheet" href="cwqt.css">
+<style>
+  .content { max-width: 1040px; margin: 0 auto; padding: 24px 20px 48px; }
+  .intro h2 { font: var(--title-weight) 26px/1.2 var(--font-heading); margin: 0 0 6px; }
+  .stats { display: flex; flex-wrap: wrap; gap: 10px; margin: 16px 0 6px; padding: 0; list-style: none; }
+  .stats li { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 14px; min-width: 120px; }
+  .stats b { display: block; font-size: 20px; color: var(--brand); }
+  .stats span { font-size: 12px; color: var(--ink-2); }
+  .muted { color: var(--ink-2); }
+  .toc { margin: 18px 0 8px; padding-left: 20px; }
+  .toc li { margin: 3px 0; }
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; margin-top: 18px; }
+  .card h3 { font: var(--title-weight) 18px/1.3 var(--font-heading); margin: 0 0 6px; }
+  .card p { margin: 0 0 10px; max-width: 75ch; }
+  .card figure { margin: 10px 0 0; }
+  .card img { display: block; width: 100%; height: auto; border: 1px solid var(--line); border-radius: 4px; background: #fff; }
+  .card .tall { max-height: 720px; overflow-y: auto; border: 1px solid var(--line); border-radius: 4px; }
+  .card .tall img { border: 0; }
+  .links { margin-top: 8px; font-size: 13px; }
+  .links a { margin-right: 14px; }
+  .sites details { border-top: 1px solid var(--line); }
+  .sites summary { cursor: pointer; padding: 8px 0; font-weight: 600; }
+  .sites ul { columns: 2; column-gap: 24px; margin: 0 0 10px; padding-left: 18px; }
+  .sites li { break-inside: avoid; margin: 2px 0; }
+  .footer { margin-top: 28px; font-size: 12px; color: var(--ink-2); }
+  @media (max-width: 640px) {
+    .content { padding: 16px 12px 36px; }
+    .intro h2 { font-size: 21px; }
+    .card { padding: 14px; }
+    .sites ul { columns: 1; }
+    .card .tall { max-height: 520px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="banner">
+  <div class="brand">
+    <img class="logo" src="{{LOGO_URL}}" alt="SWIM Coalition"
+         onerror="this.outerHTML='<span class=&quot;logo-text&quot;>SWIM Coalition</span>'">
+    <h1>Community Water Quality Testing Data Portal</h1>
+  </div>
+  <nav class="actions">
+    <a class="btn primary" href="index.html">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 3 5 8l5 5"/></svg>
+      <span class="long">Back to the map</span><span class="short">Map</span>
+    </a>
+  </nav>
+</header>
+
+<main class="content">
+  <section class="intro">
+    <h2>Charts &amp; graphics</h2>
+    <div class="muted">{{STATS_LINE}} · {{DATA_THROUGH}}</div>
+    <ul class="stats">
+      <li><b>{{N_SITES}}</b><span>sampling sites</span></li>
+      <li><b>{{N_SAMPLES}}</b><span>regular-season samples</span></li>
+      <li><b>{{SEASON_RANGE}}</b><span>seasons</span></li>
+    </ul>
+    <p class="muted">Enterococcus results from SWIM's volunteer Community Water Quality Testing program. Values
+      are MPN per 100 ml. Water quality is judged on the NYC DOH primary-contact scale: a geometric mean of
+      {{GOOD_MAX}} or less is <b>good</b>, {{GOOD_MAX}}–{{ADVISORY_MAX}} is <b>advisory</b>, and above
+      {{ADVISORY_MAX}} is <b>poor</b>. Click any chart to open it full size.</p>
+    <ol class="toc">
+      <li><a href="#trend">Water quality over time, all sites</a></li>
+      <li><a href="#heatmap">Every site, every season</a></li>
+      <li><a href="#rain">How rainfall affects bacteria levels</a></li>
+      <li><a href="#waterbody">Recent water quality by waterbody</a></li>
+      <li><a href="#latest">The latest 30 days</a></li>
+      <li><a href="#sites">Full time series for each site</a></li>
+    </ol>
+  </section>
+
+  <section class="card" id="trend">
+    <h3>1. Water quality over time, all sites</h3>
+    <p>The top panel shows the typical (median) site's geometric mean each season. The shaded band covers
+      the middle half of sites, and a gray line follows only the long-running sites, so the trend isn't
+      skewed by sites added over the years. The bottom panel shows the share of samples above the
+      single-sample limit of {{LIMIT}}, split into dry and wet weather.</p>
+    <figure><a href="1_program_trend.png" target="_blank" rel="noopener"><img src="1_program_trend.png" loading="lazy" alt="Line charts of the median site geometric mean and the share of samples over the limit, by season"></a></figure>
+  </section>
+
+  <section class="card" id="heatmap">
+    <h3>2. Every site, every season</h3>
+    <p>One row per site, grouped by waterbody, and one column per season. Each cell is colored by that
+      season's geometric mean (good, advisory or poor), and gray means the site wasn't sampled. Use it to
+      spot sites that are improving, getting worse or consistently poor. Scroll inside the image to see
+      all sites.</p>
+    <figure class="tall"><a href="2_site_by_season_heatmap.png" target="_blank" rel="noopener"><img src="2_site_by_season_heatmap.png" loading="lazy" alt="Grid of sites by season colored by water quality category"></a></figure>
+  </section>
+
+  <section class="card" id="rain">
+    <h3>3. How rainfall affects bacteria levels</h3>
+    <p>Samples are grouped by how much rain fell at Central Park on the sampling day and the two days
+      before. Heavy rain overwhelms the combined sewer system and sends sewage-contaminated overflow into
+      the waterways, so bacteria levels and the share of samples above {{LIMIT}} rise steadily with
+      rainfall.</p>
+    <figure><a href="3_rainfall_effect.png" target="_blank" rel="noopener"><img src="3_rainfall_effect.png" loading="lazy" alt="Geometric mean and share of samples over the limit for five rainfall ranges"></a></figure>
+  </section>
+
+  <section class="card" id="waterbody">
+    <h3>4. Recent water quality by waterbody ({{RECENT_RANGE}})</h3>
+    <p>Each row is a waterbody, ordered from cleanest to most contaminated over the last
+      {{RECENT_SEASONS}} seasons. The large dot is the geometric mean of all samples in that waterbody,
+      and small dots are its individual sites.</p>
+    <figure><a href="4_waterbody_comparison.png" target="_blank" rel="noopener"><img src="4_waterbody_comparison.png" loading="lazy" alt="Dot chart of geometric mean by waterbody"></a></figure>
+  </section>
+
+  <section class="card" id="latest">
+    <h3>5. The latest 30 days ({{WINDOW}})</h3>
+    <p>Each site's geometric mean over the most recent 30 days of sampling, ranked from cleanest to most
+      contaminated. This is the same calculation as the 30-day geometric mean tabs in the CWQT master
+      sheet. Hollow dots mark sites with fewer than {{MIN_N}} samples in the window.</p>
+    <figure class="tall"><a href="5_latest_30_day_status.png" target="_blank" rel="noopener"><img src="5_latest_30_day_status.png" loading="lazy" alt="Ranked dot chart of 30-day geometric mean by site"></a></figure>
+  </section>
+
+  <section class="card sites" id="sites">
+    <h3>6. Full time series for each site</h3>
+    <p>Every regular-season sample at a site, season by season, with dry- and wet-weather samples
+      marked and each season's geometric mean. Choose a site below, or download
+      <a href="site_timeseries.pdf" target="_blank" rel="noopener">all sites in one PDF</a>.</p>
+    {{SITE_LIST}}
+  </section>
+
+  <p class="footer">Updated automatically every morning from the CWQT master data sheet · {{DATA_THROUGH}} ·
+    Built {{BUILT}}.</p>
+</main>
+</body>
+</html>

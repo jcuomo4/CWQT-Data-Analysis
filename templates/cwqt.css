@@ -1,0 +1,98 @@
+/* =========================================================================
+   CWQT Data Portal: shared styles for the map (index.html) and the charts
+   page (charts.html). Edit this file to change the look. No Python needed;
+   the next daily run publishes the change.
+   ========================================================================= */
+
+/* ---- SWIM BRAND (taken from swimmablenyc.org, Oct 2026) ---- */
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600&display=swap");
+:root {
+  --brand:        #092e6e;   /* SWIM navy: headings, text, buttons            */
+  --brand-dark:   #04193b;   /* hover / pressed                               */
+  --link:         #0d4ab2;   /* SWIM blue: links                              */
+  --accent:       #ffa805;   /* SWIM orange: small highlights                 */
+  --brand-tint:   #e8eefa;   /* light blue for selected items                 */
+  --cream:        #f7f7f3;   /* SWIM off-white page background                */
+  --font-body:    "Poppins", "Helvetica Neue", Arial, sans-serif;
+  --font-heading: "Poppins", "Helvetica Neue", Arial, sans-serif;
+  --title-weight: 600;
+  --btn-radius:   0;         /* SWIM's buttons have square corners            */
+}
+/* ------------------------------------------------------------------------ */
+
+:root {
+  --ink:      #092e6e;   /* SWIM sets body text in its navy too */
+  --ink-2:    #4f5d78;
+  --line:     #dde1e8;
+  --surface:  #ffffff;
+  --page:     var(--cream);
+  --radius:   8px;
+  --shadow:   0 1px 4px rgba(0, 0, 0, .18);
+  --banner-h: 96px;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body {
+  font: 14px/1.4 var(--font-body);
+  color: var(--ink);
+  background: var(--page);
+  -webkit-text-size-adjust: 100%;
+}
+a { color: var(--link); }
+a:hover { color: var(--brand); }
+
+/* ---- Top banner ---- */
+.banner {
+  position: relative;
+  z-index: 1100;                      /* above the map and its controls */
+  height: var(--banner-h);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 20px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .06);
+}
+.brand { display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+.brand .logo { height: 52px; width: auto; max-width: 300px; object-fit: contain; object-position: left center; display: block; }
+.brand .logo-text { font: 600 18px var(--font-heading); color: var(--brand); }
+.brand h1 {
+  margin: 2px 0 0;
+  font: var(--title-weight) 16px/1.2 var(--font-heading);
+  color: var(--brand);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 36px; padding: 0 14px;
+  font: 500 14px var(--font-body);
+  border-radius: var(--btn-radius);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.btn:hover { border-color: var(--brand); color: var(--brand); }
+.btn.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+.btn.primary:hover { background: var(--brand-dark); border-color: var(--brand-dark); color: #fff; }
+.btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+.btn:focus-visible, summary:focus-visible, input:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+
+/* ---- Phones ---- */
+@media (max-width: 640px) {
+  :root { --banner-h: 76px; }
+  .banner { padding: 0 10px; gap: 8px; }
+  .brand .logo { height: 32px; max-width: 170px; }
+  .brand h1 { font-size: 12px; white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .btn { height: 36px; padding: 0 10px; font-size: 13px; }
+  .btn .long { display: none; }       /* "Charts & graphics" -> "Charts" */
+}
+@media (min-width: 641px) { .btn .short { display: none; } }

@@ -12,20 +12,24 @@ and produces maps and charts of Enterococcus results.
     python cwqt_visualize.py --sheet-id 1AbC...xyz     # download straight from Google Sheets
 
 Download the sheet from Google Sheets with File > Download > Microsoft Excel (.xlsx).
+The web pages' look and wording live in templates/ (map.html, charts.html, cwqt.css);
+keep that folder next to this script.
 Thresholds, the wet-weather definition and the season dates are in the CONFIGURATION
 section below.
 
 Outputs (written to ./cwqt_outputs by default)
 ----------------------------------------------
-  cwqt_map.html                      Interactive map. One layer per season plus an
-                                     "all seasons" layer and a "latest 30 days" layer.
-                                     Click a site for its stats and a mini trend chart.
+  index.html                         Interactive map (the "Data Portal"): season layers, basemaps,
+                                     popups with a mini trend chart and a link to the site's PDF.
+  charts.html                        Page listing every chart with a short description.
+  cwqt.css                           Shared look for both pages (copied from templates/).
   1_program_trend.png                Program-wide water quality by season, wet vs dry weather
   2_site_by_season_heatmap.png       Every site x every season, colored by seasonal geomean
   3_rainfall_effect.png              How results change with rainfall in the prior ~72 hours
   4_waterbody_comparison.png         Recent geomean by waterbody, one dot per site
   5_latest_30_day_status.png         Current 30-day geomean per site (what the GeoMean tabs show)
   site_timeseries.pdf                One page per site: every regular-season sample, by season
+  sites/site-NNN.pdf                 The same page for each site on its own (linked from the map)
   tables/*.csv                       The numbers behind every chart (open in Sheets/Excel)
   data_quality_report.txt            Things in the workbook worth fixing
 
@@ -44,6 +48,7 @@ How values are treated (matches the workbook FAQ and the GeoMean tabs)
 from __future__ import annotations
 
 import argparse
+import html
 import json
 import math
 import os
@@ -862,8 +867,18 @@ def _season_x(dates: pd.Series, seasons: list[int]) -> pd.Series:
     return yr.map(idx) + 0.07 + 0.86 * frac
 
 
-def site_timeseries_pdf(samples, sites, out: Path, png_dir: Path | None = None):
+def site_pdf_name(site_id: int) -> str:
+    """Path (relative to the output folder) of a site's own time-series PDF."""
+    return f"sites/site-{int(site_id):03d}.pdf"
+
+
+def site_timeseries_pdf(samples, sites, out: Path, png_dir: Path | None = None) -> dict[int, str]:
+    """All sites in one PDF (out), plus one small PDF per site in out.parent/sites/.
+    Returns {site_id: relative path of that site's PDF}."""
     order = sites.sort_values(["waterbody", "site"])
+    site_dir = out.parent / "sites"
+    site_dir.mkdir(exist_ok=True)
+    made: dict[int, str] = {}
     with PdfPages(out) as pdf:
         for _, srow in order.iterrows():
             allg = samples[samples.site_id == srow.site_id]
@@ -913,25 +928,62 @@ def site_timeseries_pdf(samples, sites, out: Path, png_dir: Path | None = None):
             ax.legend(handles, labels_, loc="upper left", bbox_to_anchor=(0, -0.2), ncols=4,
                       fontsize=8)
             pdf.savefig(fig)
+            rel = site_pdf_name(srow.site_id)
+            fig.savefig(out.parent / rel)
+            made[int(srow.site_id)] = rel
             if png_dir is not None:
                 fn = re.sub(r"[^A-Za-z0-9]+", "_", f"{srow.site_id:03d}_{srow.site}").strip("_")
                 fig.savefig(png_dir / f"{fn}.png")
             plt.close(fig)
+    return made
 
 
 # =============================================================================
-# INTERACTIVE MAP (Leaflet)
+# WEB PAGES (map + charts page), filled in from the templates/ folder
 # =============================================================================
-# The map is one self-contained HTML file: the numbers are embedded as a compact
-# JSON table and a small script builds the markers and popups in the browser.
-# Only the Leaflet library and the basemap tiles load from the internet.
+# The look, layout and wording of the web pages live in templates/ (map.html,
+# charts.html, cwqt.css), so they can be edited without touching this script.
+# The script only fills in the data. Placeholders in the templates look like
+# {{NAME}}.
 
-# Light gray basemap (free, no API key). Swap for any XYZ tile URL you prefer,
-# e.g. OpenStreetMap: "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-MAP_TILES = ("https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/"
-             "World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}")
-MAP_TILES_ATTR = "Tiles &copy; Esri &mdash; Esri, HERE, Garmin, &copy; OpenStreetMap contributors"
-LEAFLET_VERSION = "1.9.4"
+TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
+
+# SWIM logo: the same image used in the header of swimmablenyc.org. To stop relying on
+# that address, save the logo as templates/assets/swim-logo.png; it is then used instead.
+LOGO_URL = ("https://static.wixstatic.com/media/875d16_e74e0d2d48474f5d9571e24e7277fb3d~mv2.png/"
+            "v1/fill/w_541,h_120,al_c,q_85,usm_0.66_1.00_0.01,enc_avif,quality_auto/"
+            "NEW-SWIM-Logo%20email%20res.png")
+
+
+def _template(name: str) -> str:
+    path = TEMPLATE_DIR / name
+    if not path.exists():
+        sys.exit(f"Missing web template {path}. Keep the templates/ folder next to cwqt_visualize.py.")
+    return path.read_text(encoding="utf-8")
+
+
+def _fill(text: str, values: dict) -> str:
+    for k, v in values.items():
+        text = text.replace("{{" + k + "}}", str(v))
+    return text
+
+
+def _warn_unfilled(text: str, name: str):
+    left = sorted(set(re.findall(r"\{\{[A-Z_]+\}\}", text)))
+    if left:
+        print(f"  note: {name} has placeholders the script doesn't fill: {', '.join(left)}")
+
+
+def copy_web_assets(out: Path) -> str:
+    """Copy cwqt.css (and templates/assets/, if any) next to the pages. Returns the logo URL."""
+    import shutil
+    shutil.copyfile(TEMPLATE_DIR / "cwqt.css", out / "cwqt.css")
+    assets = TEMPLATE_DIR / "assets"
+    if assets.is_dir():
+        shutil.copytree(assets, out / "assets", dirs_exist_ok=True)
+        if (assets / "swim-logo.png").exists():
+            return "assets/swim-logo.png"
+    return LOGO_URL
 
 
 def _num(v, nd=1):
@@ -961,12 +1013,14 @@ def _stat_rows(stats: pd.DataFrame, site_ids: set) -> list:
     return rows
 
 
-def build_map(samples, sites, site_all, site_year, win, out: Path):
-    have = sites[sites.site_id.isin(samples.site_id)].dropna(subset=["lat", "lon"])
+def build_map(season, sites, site_all, site_year, win, pdfs: dict, logo: str, out: Path):
+    """Write the map page (index.html) from templates/map.html."""
+    have = sites[sites.site_id.isin(season.site_id)].dropna(subset=["lat", "lon"])
     ids = set(have.site_id)
-    y0, y1 = int(samples.year.min()), int(samples.year.max())
+    y0, y1 = int(season.year.min()), int(season.year.max())
 
-    # Layers in radio-button order; the first one is shown when the map opens.
+    # Order of the choices under Layers > CWQT water quality. The first one is shown when
+    # the map opens; "earlier": True puts a season under the nested "Earlier seasons" list.
     seasons = sorted((int(y) for y in site_year.year.unique()), reverse=True)
     layers = [{"name": f"{seasons[0]} season", "label": f"{seasons[0]} season",
                "rows": _stat_rows(site_year[site_year.year == seasons[0]], ids)}]
@@ -978,7 +1032,7 @@ def build_map(samples, sites, site_all, site_year, win, out: Path):
     layers.append({"name": f"All seasons ({y0}–{y1})", "label": f"all seasons {y0}–{y1}",
                    "rows": _stat_rows(site_all, ids)})
     for y in seasons[1:]:
-        layers.append({"name": f"{y} season", "label": f"{y} season",
+        layers.append({"name": f"{y} season", "label": f"{y} season", "earlier": True,
                        "rows": _stat_rows(site_year[site_year.year == y], ids)})
 
     data = {
@@ -990,189 +1044,63 @@ def build_map(samples, sites, site_all, site_year, win, out: Path):
         "trend": {int(sid): [[int(y), _num(gm)] for y, gm in zip(g.year, g.geomean) if np.isfinite(gm)]
                   for sid, g in site_year.sort_values("year").groupby("site_id")},
         "overall": {int(r.site_id): _num(r.geomean) for r in site_all.itertuples()},
+        "pdfs": {sid: rel for sid, rel in pdfs.items() if sid in ids},
         "layers": layers,
         "years": [y0, y1],
         "cfg": {"good": GOOD_MAX, "adv": ADVISORY_MAX, "limit": SINGLE_SAMPLE_LIMIT,
                 "minN": MIN_SAMPLES_FOR_GEOMEAN, "floor": MPN_FLOOR,
                 "crit": {k: list(v) for k, v in DEC_CRITERIA.items()},
                 "colors": CATEGORY_COLORS, "labels": CATEGORY_LABELS,
-                "series": SERIES, "surface": SURFACE, "ink": INK, "ink2": INK_2},
+                "series": SERIES, "ink2": INK_2},
         "bounds": [[float(have.lat.min()), float(have.lon.min())],
                    [float(have.lat.max()), float(have.lon.max())]],
-        "title": f"CWQT water quality · {len(have)} sites · {len(samples):,} regular-season "
-                 f"samples, {y0}–{y1}",
-        "updated": f"Data through {samples.date.max():%b %-d, %Y}",
+        "updated": f"Data through {season.date.max():%b %-d, %Y}",
     }
     payload = json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+    page = _fill(_template("map.html"), {"LOGO_URL": html.escape(logo)})
+    _warn_unfilled(page.replace("{{DATA}}", ""), "map.html")
+    out.write_text(page.replace("{{DATA}}", payload, 1), encoding="utf-8")
 
-    page = (_MAP_TEMPLATE
-            .replace("__LEAFLET__", LEAFLET_VERSION)
-            .replace("__TILES__", MAP_TILES)
-            .replace("__ATTR__", MAP_TILES_ATTR)
-            .replace("__SURFACE__", SURFACE).replace("__INK2__", INK_2).replace("__INK__", INK)
-            .replace("__DATA__", payload))
+
+def build_charts_page(season, sites, win, pdfs: dict, logo: str, out: Path):
+    """Write the charts page (charts.html) from templates/charts.html."""
+    have = sites[sites.site_id.isin(season.site_id)]
+    y0, y1 = int(season.year.min()), int(season.year.max())
+    first_recent = y1 - RECENT_SEASONS + 1
+
+    # Per-site PDF list, grouped by waterbody
+    parts = []
+    listed = sites[sites.site_id.isin(pdfs.keys())].sort_values(["waterbody", "site"])
+    for wb, g in listed.groupby("waterbody", sort=True):
+        items = "".join(
+            f'<li><a href="{pdfs[int(r.site_id)]}" target="_blank" rel="noopener">'
+            f'{html.escape(short_name(r.site, wb))}</a></li>' for r in g.itertuples())
+        parts.append(f'<details><summary>{html.escape(wb)} <span class="muted">({len(g)} '
+                     f'site{"s" if len(g) != 1 else ""})</span></summary><ul>{items}</ul></details>')
+
+    window = ""
+    if win is not None and len(win):
+        window = f"{win.window_start.iloc[0]:%b %-d} – {win.window_end.iloc[0]:%b %-d, %Y}"
+    values = {
+        "LOGO_URL": html.escape(logo),
+        "STATS_LINE": f"{len(have)} sites · {len(season):,} regular-season samples, {y0}–{y1}",
+        "DATA_THROUGH": f"Data through {season.date.max():%b %-d, %Y}",
+        "N_SITES": f"{len(have)}",
+        "N_SAMPLES": f"{len(season):,}",
+        "SEASON_RANGE": f"{y0}–{y1}",
+        "RECENT_RANGE": f"{first_recent}–{y1}",
+        "RECENT_SEASONS": RECENT_SEASONS,
+        "WINDOW": window,
+        "GOOD_MAX": GOOD_MAX,
+        "ADVISORY_MAX": ADVISORY_MAX,
+        "LIMIT": SINGLE_SAMPLE_LIMIT,
+        "MIN_N": MIN_SAMPLES_FOR_GEOMEAN,
+        "BUILT": pd.Timestamp.now(tz="America/New_York").strftime("%b %-d, %Y"),
+        "SITE_LIST": "\n".join(parts),
+    }
+    page = _fill(_template("charts.html"), values)
+    _warn_unfilled(page, "charts.html")
     out.write_text(page, encoding="utf-8")
-
-
-_MAP_TEMPLATE = r"""<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>CWQT water quality map</title>
-<link rel="stylesheet" href="https://unpkg.com/leaflet@__LEAFLET__/dist/leaflet.css">
-<script src="https://unpkg.com/leaflet@__LEAFLET__/dist/leaflet.js"></script>
-<style>
-  html, body, #map { height: 100%; margin: 0; }
-  body { background: #e5e5e3; font: 12px system-ui, -apple-system, "Segoe UI", sans-serif; color: __INK__; }
-  .panel { background: __SURFACE__; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,.25); }
-  #title { position: fixed; top: 12px; left: 56px; z-index: 1000; padding: 8px 12px; font-weight: 600; font-size: 14px; }
-  #title small { display: block; font-weight: 400; font-size: 11px; color: __INK2__; margin-top: 2px; }
-  #legend { position: fixed; bottom: 24px; left: 12px; z-index: 1000; padding: 10px 12px; max-width: 250px; }
-  #legend .row { margin: 2px 0; }
-  .dot { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 7px; vertical-align: -1px; }
-  .muted { color: __INK2__; }
-  .layers { padding: 8px 12px; max-height: calc(100vh - 120px); overflow-y: auto; }
-  .layers b { display: block; margin-bottom: 3px; }
-  .layers label { display: block; line-height: 1.5; cursor: pointer; white-space: nowrap; }
-  .layers input { margin: 0 6px 0 0; vertical-align: -1px; }
-  .leaflet-popup-content { margin: 12px 14px; font: 12px system-ui, -apple-system, "Segoe UI", sans-serif; }
-  .pop { width: 290px; }
-  .pop .name { font-weight: 700; font-size: 13px; margin-bottom: 2px; }
-  .pop table { border-collapse: collapse; width: 100%; font-size: 12px; }
-  .pop td:first-child { padding-right: 10px; }
-</style>
-</head>
-<body>
-<div id="map"></div>
-<div id="title" class="panel"></div>
-<div id="legend" class="panel"></div>
-<script id="cwqt-data" type="application/json">__DATA__</script>
-<script>
-(function () {
-  const D = JSON.parse(document.getElementById("cwqt-data").textContent);
-  const C = D.cfg;
-  const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-  const fmt = v => (v === null || v === undefined) ? "–" : Math.round(v).toLocaleString("en-US");
-  const MON = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-  const ymd = s => s.split("-").map(Number);
-  const dLong = s => { const [y, m, d] = ymd(s); return `${MON[m-1]} ${d}, ${y}`; };
-  const span = (a, b) => {
-    const [ya, ma, da] = ymd(a), [yb, mb, db] = ymd(b);
-    if (a === b) return dLong(a);
-    if (ya === yb) return `${MON[ma-1]} ${da} – ${MON[mb-1]} ${db}, ${yb}`;
-    return `${MON[ma-1]} ${ya} – ${MON[mb-1]} ${yb}`;
-  };
-  const category = gm => gm === null ? "nodata" : gm <= C.good ? "good" : gm <= C.adv ? "advisory" : "poor";
-
-  // ---- popup trend chart (inline SVG, log scale) ----
-  function sparkline(pts) {
-    const w = 250, h = 74, pl = 4, pr = 4, pt = 6, pb = 14, [y0, y1] = D.years;
-    const lo = Math.log10(C.floor), hi = Math.log10(5000);
-    const X = y => pl + (w - pl - pr) * ((y - y0) / Math.max(1, y1 - y0));
-    const Y = v => { v = Math.min(Math.max(v, C.floor), 5000);
-                     return pt + (h - pt - pb) * (1 - (Math.log10(v) - lo) / (hi - lo)); };
-    let s = `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" role="img" aria-label="Seasonal geomean trend" style="display:block">`;
-    [[C.floor, C.good, "good"], [C.good, C.adv, "advisory"], [C.adv, 5000, "poor"]].forEach(([a, b, k]) => {
-      s += `<rect x="${pl}" y="${Y(b).toFixed(1)}" width="${w - pl - pr}" height="${(Y(a) - Y(b)).toFixed(1)}" fill="${C.colors[k]}" fill-opacity="0.10"/>`;
-    });
-    for (let i = 1; i < pts.length; i++) {
-      if (pts[i][0] - pts[i-1][0] === 1) {
-        s += `<line x1="${X(pts[i-1][0]).toFixed(1)}" y1="${Y(pts[i-1][1]).toFixed(1)}" x2="${X(pts[i][0]).toFixed(1)}" y2="${Y(pts[i][1]).toFixed(1)}" stroke="${C.series}" stroke-width="2" stroke-linecap="round"/>`;
-      }
-    }
-    pts.forEach(([y, v]) => {
-      s += `<circle cx="${X(y).toFixed(1)}" cy="${Y(v).toFixed(1)}" r="3.5" fill="${C.series}" stroke="#fff" stroke-width="1.5"><title>${y}: ${fmt(v)}</title></circle>`;
-    });
-    s += `<text x="${pl}" y="${h - 2}" font-size="10" fill="${C.ink2}">${y0}</text>`;
-    s += `<text x="${w - pr}" y="${h - 2}" font-size="10" fill="${C.ink2}" text-anchor="end">${y1}</text></svg>`;
-    return s;
-  }
-
-  function popup(r, layerLabel) {
-    const [id, gm, n, pct, gmd, nd, gmw, nw, first, last, lastMpn] = r;
-    const [name, wb, boro, cls] = D.sites[id];
-    const cat = category(gm);
-    const crit = C.crit[cls];
-    let critRow = "";
-    if (crit) critRow = `<tr><td>NYS DEC class ${esc(cls)} criteria</td><td>geomean ≤ ${crit[0]}, ≤10% of samples over ${crit[1]}</td></tr>`;
-    else if (cls) critRow = `<tr><td>NYS DEC class</td><td>${esc(cls)}</td></tr>`;
-    const wetdry = (nd || nw) ? `<tr><td>Geomean, dry / wet weather</td><td>${fmt(gmd)} (n=${nd}) / ${fmt(gmw)} (n=${nw})</td></tr>` : "";
-    const few = n < C.minN ? `<div class="muted" style="margin-top:4px">Only ${n} sample${n !== 1 ? "s" : ""}; a geomean needs ≥${C.minN} to compare with standards.</div>` : "";
-    return `<div class="pop">
-      <div class="name">${esc(name)}</div>
-      <div class="muted" style="margin-bottom:6px">${esc(wb)} · ${esc(boro)} · Site ID ${id}</div>
-      <div style="margin-bottom:6px"><span class="dot" style="width:10px;height:10px;margin-right:6px;background:${C.colors[cat]}"></span><b>${esc(C.labels[cat])}</b> <span class="muted">(${esc(layerLabel)})</span></div>
-      <table>
-        <tr><td>Geometric mean</td><td><b>${fmt(gm)}</b> MPN/100 ml</td></tr>
-        <tr><td>Samples</td><td>${n.toLocaleString("en-US")} &nbsp;<span class="muted">${span(first, last)}</span></td></tr>
-        <tr><td>Samples over ${C.limit}</td><td>${pct}%</td></tr>
-        ${wetdry}
-        <tr><td>Most recent result</td><td>${fmt(lastMpn)} on ${dLong(last)}</td></tr>
-        ${critRow}
-      </table>${few}
-      <div class="muted" style="margin-top:8px">Seasonal geomean, all years (overall ${fmt(D.overall[id])}):</div>
-      ${sparkline(D.trend[id] || [])}
-    </div>`;
-  }
-
-  // ---- map ----
-  const map = L.map("map", { zoomControl: true, preferCanvas: false });
-  L.tileLayer("__TILES__", { attribution: "__ATTR__", maxZoom: 16 }).addTo(map);
-  L.control.scale().addTo(map);
-  map.fitBounds(D.bounds);
-
-  const groups = D.layers.map(() => null);
-  function buildGroup(i) {
-    const layer = D.layers[i], g = L.layerGroup();
-    layer.rows.forEach(r => {
-      const [id, gm, n] = r, s = D.sites[id];
-      const cat = category(gm), few = n < C.minN;
-      L.circleMarker([s[4], s[5]], {
-        radius: few ? 6 : 7, color: few ? C.ink2 : C.surface, weight: few ? 1.5 : 2,
-        dashArray: few ? "3,3" : null, fillColor: C.colors[cat], fillOpacity: few ? 0.55 : 0.95
-      })
-        .bindTooltip(`${esc(s[0])} — geomean ${fmt(gm)} (${esc(C.labels[cat].split(":")[0])}, n=${n})`, { sticky: true })
-        .bindPopup(() => popup(r, layer.label), { maxWidth: 320 })
-        .addTo(g);
-    });
-    return g;
-  }
-  let current = -1;
-  function show(i) {
-    if (current >= 0) map.removeLayer(groups[current]);
-    groups[i] = groups[i] || buildGroup(i);
-    groups[i].addTo(map);
-    current = i;
-  }
-
-  const Ctl = L.Control.extend({
-    options: { position: "topright" },
-    onAdd() {
-      const div = L.DomUtil.create("div", "panel layers");
-      div.innerHTML = "<b>Show results for</b>" + D.layers.map((l, i) =>
-        `<label><input type="radio" name="cwqt-layer" value="${i}"${i === 0 ? " checked" : ""}>${esc(l.name)}</label>`).join("");
-      L.DomEvent.disableClickPropagation(div);
-      L.DomEvent.disableScrollPropagation(div);
-      div.addEventListener("change", e => show(Number(e.target.value)));
-      return div;
-    }
-  });
-  map.addControl(new Ctl());
-  show(0);
-
-  document.getElementById("title").innerHTML = `${esc(D.title)}<small>${esc(D.updated)}</small>`;
-  document.getElementById("legend").innerHTML =
-    `<div style="font-weight:700;margin-bottom:4px">Enterococcus geometric mean</div>
-     <div class="muted" style="margin-bottom:6px">MPN per 100 ml, NYC DOH primary-contact scale</div>` +
-    ["good", "advisory", "poor"].map(k => `<div class="row"><span class="dot" style="background:${C.colors[k]}"></span>${esc(C.labels[k])}</div>`).join("") +
-    `<div class="row" style="margin-top:4px"><span class="dot" style="width:9px;height:9px;border:1.5px dashed ${C.ink2};opacity:.8"></span>Fewer than ${C.minN} samples</div>
-     <div class="muted" style="margin-top:6px">Pick a season at top right. Click a site for details and its trend.</div>`;
-})();
-</script>
-</body>
-</html>
-"""
 
 
 # =============================================================================
@@ -1248,7 +1176,7 @@ def main(argv=None):
                          "Off by default so numbers match the GeoMean tabs.")
     ap.add_argument("--site-pngs", action="store_true",
                     help="also save one PNG per site (in addition to the PDF)")
-    ap.add_argument("--no-map", action="store_true", help="skip the interactive map")
+    ap.add_argument("--no-map", action="store_true", help="skip the web pages (map and charts page)")
     args = ap.parse_args(argv)
 
     out = args.out
@@ -1298,12 +1226,15 @@ def main(argv=None):
     if args.site_pngs:
         png_dir = out / "site_pngs"
         png_dir.mkdir(exist_ok=True)
-    site_timeseries_pdf(samples, sites, out / "site_timeseries.pdf", png_dir)
-    print(f"  wrote {out / 'site_timeseries.pdf'}")
+    pdfs = site_timeseries_pdf(samples, sites, out / "site_timeseries.pdf", png_dir)
+    print(f"  wrote {out / 'site_timeseries.pdf'} and {len(pdfs)} single-site PDFs in {out / 'sites'}")
 
     if not args.no_map:
-        build_map(season, sites, site_all, site_year, win, out / "cwqt_map.html")
-        print(f"  wrote {out / 'cwqt_map.html'} ({(out / 'cwqt_map.html').stat().st_size / 1e3:,.0f} KB)")
+        logo = copy_web_assets(out)
+        build_map(season, sites, site_all, site_year, win, pdfs, logo, out / "index.html")
+        print(f"  wrote {out / 'index.html'} (map, {(out / 'index.html').stat().st_size / 1e3:,.0f} KB)")
+        build_charts_page(season, sites, win, pdfs, logo, out / "charts.html")
+        print(f"  wrote {out / 'charts.html'}")
 
     # Small machine-readable summary (used by the automatic update to detect new data)
     (out / "status.json").write_text(json.dumps({
