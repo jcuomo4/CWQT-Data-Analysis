@@ -44,9 +44,11 @@ jobs:
         # data-quality report stay private.
         run: |
           mkdir -p site
-          cp build/cwqt_map.html site/index.html
-          cp build/cwqt_map.html site/cwqt_map.html
+          cp build/index.html build/charts.html build/cwqt.css site/
+          cp build/index.html site/cwqt_map.html   # old address keeps working
           cp build/*.png build/site_timeseries.pdf site/
+          cp -r build/sites site/
+          if [ -d build/assets ]; then cp -r build/assets site/; fi
 
       - uses: actions/configure-pages@v6
 
