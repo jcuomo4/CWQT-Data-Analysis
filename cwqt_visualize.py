@@ -1083,7 +1083,6 @@ def build_charts_page(season, sites, win, pdfs: dict, logo: str, out: Path):
         window = f"{win.window_start.iloc[0]:%b %-d} – {win.window_end.iloc[0]:%b %-d, %Y}"
     values = {
         "LOGO_URL": html.escape(logo),
-        "STATS_LINE": f"{len(have)} sites · {len(season):,} regular-season samples, {y0}–{y1}",
         "DATA_THROUGH": f"Data through {season.date.max():%b %-d, %Y}",
         "N_SITES": f"{len(have)}",
         "N_SAMPLES": f"{len(season):,}",

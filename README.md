@@ -33,8 +33,8 @@ Results entered in the master sheet automatically appear on the map the next mor
 
 | Output | Shows | Published on the site? |
 |---|---|---|
-| `index.html` | The map page. It has a SWIM banner with links to the charts page and a **Layers** menu: CWQT results by season, "Latest 30 days", "All seasons" and earlier seasons, plus basemap choices and a streams overlay. Clicking a site shows its stats, a mini trend chart and a link to its full time series. (`cwqt_map.html` is a copy, so the old address still works.) | Yes |
-| `charts.html` | Charts page: summary numbers, each chart with a short description, and a list of every site's time-series PDF | Yes |
+| `index.html` | The map page. It has a SWIM banner with a **Charts & Graphics** button and a **Layers** menu: CWQT results by season, "Latest 30 days", "All seasons" and earlier seasons, plus basemap choices and a streams overlay. Clicking a site shows its stats, a mini trend chart and a link to its full time series. (`cwqt_map.html` is a copy, so the old address still works.) | Yes |
+| `charts.html` | Charts & Graphics page: "Data through" date and summary numbers, each chart with a short description, and a list of every site's time-series PDF | Yes |
 | `cwqt.css` | Shared styles for both pages (copied from `templates/`) | Yes |
 | `1_program_trend.png` | Typical site geomean by season (all sites, and long-running sites only) and % of samples over 104, wet vs dry weather | Yes |
 | `2_site_by_season_heatmap.png` | Every site × every season, colored good / advisory / poor | Yes |
@@ -47,7 +47,7 @@ Results entered in the master sheet automatically appear on the map the next mor
 | `data_quality_report.txt` | Problems found in the sheet (bad coordinates, duplicate rows, names out of sync, lab QC notes…) | No |
 | `status.json` | Latest sample date and counts | Committed to the repository |
 
-Published files are reachable by name, e.g. `…/CWQT-Data-Analysis/1_program_trend.png`. What gets
+Published files are reachable by name, e.g. `…/CWQT-Data-Portal/1_program_trend.png`. What gets
 published is set in the "Choose what gets published" step of the workflow.
 
 ---
@@ -121,7 +121,7 @@ Ubuntu 24.04:
 - The commit history shows "Data updated: …" after new results are entered.
 
 ### If a run fails
-GitHub emails the account that owns the repository. Open the failed run → `update` job to see the
+GitHub emails the person who set up the workflow (or who last changed its schedule line). Open the failed run → `update` job to see the
 error, then check:
 
 | Message | Likely cause / fix |
@@ -148,7 +148,7 @@ The design lives in `templates/` and is separate from the calculations. Edit tho
 | Banner title, button labels, popup wording, legend text | `templates/map.html` |
 | Chart descriptions and page text on the charts page | `templates/charts.html` |
 | The logo | It's loaded from SWIM's Wix site (`LOGO_URL` in `cwqt_visualize.py`). To host it here instead, save it as `templates/assets/swim-logo.png`. |
-| Basemap choices or the streams overlay | the `BASEMAPS` and `WATERWAYS` lists near the top of the script in `templates/map.html` |
+| Basemap choices or the streams overlay | the `BASEMAPS` and `WATERWAYS` lists near the top of the script in `templates/map.html`. `WATERWAYS.minZoom` sets how far in you must zoom before streams appear. |
 | Thresholds, categories, season dates | the CONFIGURATION section of `cwqt_visualize.py` (used by the charts *and* the map) |
 
 Words in double curly braces in the templates (e.g. `{{DATA}}`, `{{N_SITES}}`) are filled in by the
@@ -158,11 +158,19 @@ script. Keep them where you want those values to appear.
 `templates/assets/`, then add an entry to the `EXTRA_LAYERS` list in `templates/map.html`. There's a
 commented example there. Each entry appears as its own group with a checkbox in the Layers menu.
 
+Shapefiles and KML files need converting to GeoJSON first. Do it once per dataset, e.g. at
+<https://mapshaper.org>: drop in the file (for a shapefile, all of its parts: `.shp`, `.shx`, `.dbf`
+and `.prj`), then Export → GeoJSON. While there:
+- Make sure it's in latitude/longitude. NYC data often comes in State Plane feet; in mapshaper, type
+  `-proj wgs84` in the console.
+- Simplify large drainage-area polygons (Simplify, ~10–20%) so the file stays small and fast.
+
 **Current design** (October 2026), matched to swimmablenyc.org:
 - Poppins font, SWIM navy `#092e6e` with square-cornered buttons, SWIM blue `#0d4ab2` links, cream
   `#f7f7f3` page background.
 - Light gray basemap with the USGS streams and rivers overlay on top, so narrow waterways like the
-  Bronx River stand out. "Streets" and "Satellite" basemaps are also available.
+  Bronx River stand out. The overlay appears from the ~1-mile zoom level, because USGS labels every
+  lake and reservoir at the citywide view. "Streets" and "Satellite" basemaps are also available.
 - On phones the legend starts collapsed, button labels shorten, and tap targets are larger.
 
 ---
@@ -209,20 +217,24 @@ preview the portal before publishing.
    Settings → Pages.
 6. **Wix:** Add Elements → Embed Code → **Embed a site** → the Pages address.
 
-**Moving the repository to a SWIM account:** use Settings → General → Transfer ownership. Then:
+**Moving the repository to another account:** use Settings → General → Transfer ownership, or copy
+the files into a new repository there. Then:
 - re-add the secrets;
 - turn Pages back on;
-- **update the Wix embed**, because the site address changes to
-  `https://<new-owner>.github.io/CWQT-Data-Analysis/`;
+- **update the Wix embed and any shared links**, because the site address changes to
+  `https://<new-owner>.github.io/CWQT-Data-Portal/`;
 - add SWIM staff as collaborators so failure emails reach someone who can act on them.
+
+If you *copy* rather than transfer, disable the workflow in the old repository (Actions → *Update CWQT
+map* → ⋯ → Disable workflow). Otherwise both copies keep publishing every morning.
 
 ---
 
 ## Known data issues to fix in the sheet
-Run the script locally and open `data_quality_report.txt` for the current list. As of October 2026:
-- Site 160 (Hackensack) has a positive longitude. The script corrects it for the map.
+Run the script locally and open `data_quality_report.txt` for the current list. Found in October 2026:
 - 8 duplicate site+date rows.
 - 5 rows with no MPN result.
 - 4 site names in Data that differ from Information.
-- No 2026 rainfall entered yet, so 2026 has no wet/dry split.
 
+Fixed in October 2026: site 160's (Hackensack) positive longitude, and the 2026 rainfall, which is now
+entered, so 2026 has a wet/dry split. The script still checks for both, in case they recur.
