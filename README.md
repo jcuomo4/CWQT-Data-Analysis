@@ -1,4 +1,4 @@
-# CWQT Data Analysis
+# CWQT Data Portal
 
 The **Community Water Quality Testing Data Portal**: an interactive map and charts of Enterococcus
 results from the CWQT program, based on the CWQT master Google Sheet.
