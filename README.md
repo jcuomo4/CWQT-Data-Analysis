@@ -1,20 +1,19 @@
 # CWQT Data Analysis
 
 The **Community Water Quality Testing Data Portal**: an interactive map and charts of Enterococcus
-results from the SWIM Coalition's CWQT program, rebuilt automatically every morning from the CWQT
-master Google Sheet.
+results from the CWQT program, based on the CWQT master Google Sheet.
 
-**Live portal:** <https://jcuomo4.github.io/CWQT-Data-Analysis/> ·
-**Charts page:** <https://jcuomo4.github.io/CWQT-Data-Analysis/charts.html>
+**Data Portal:** <https://jcuomo4.github.io/CWQT-Data-Analysis/>
+**CWQT Master Google Sheet:** <https://docs.google.com/spreadsheets/d/1813b2nagaxZ80xRfyMZNNKySZOitro5Nt7W4E9WNQDA/edit?pli=1&gid=1924583806#gid=1924583806>
 
 ```
 CWQT master Google Sheet
         │  downloaded daily at 7:17 am ET (GitHub Actions)
         ▼
-cwqt_visualize.py + templates/  ──►  map, charts page, PDFs  ──►  GitHub Pages  ──►  Wix "Embed a site"
+cwqt_visualize.py + templates/  ──►  map, charts page, PDFs  ──►  GitHub Pages
 ```
 
-Nobody needs to run anything. Results entered in the sheet appear on the map the next morning.
+Results entered in the master sheet automatically appear on the map the next morning.
 
 ---
 
